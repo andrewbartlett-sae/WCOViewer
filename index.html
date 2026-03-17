@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resource Hierarchy - Dynamic Loader</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.4;
+            background-color: #f4f7f6;
+            color: #333;
+            padding: 15px;
+        }
+        .icon-btn {
+            border: 1px solid #cbd5e0;
+            background: #fff;
+            color: #2d3748;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        .icon-btn:hover {
+            background: #edf2f7;
+            border-color: #a0aec0;
+        }
+        .container {
+            width: 100%;
+            max-width: none;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        h1 {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+            color: #1a202c;
+            display: inline-block;
+        }
+        
+        /* Global Controls */
+        .global-controls {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #edf2f7;
+        }
+        .btn {
+            padding: 6px 12px;
+            margin-right: 8px;
+            cursor: pointer;
+            border-radius: 6px;
+            border: 1px solid #cbd5e0;
+            background: #fff;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn:hover {
+            background: #edf2f7;
+            border-color: #a0aec0;
+        }
+        .btn-primary {
+            background: #3182ce;
+            color: white;
+            border-color: #2b6cb0;
+        }
+        .btn-primary:hover {
+            background: #2b6cb0;
+        }
+        .btn-toggle-active {
+            background: #2c5282;
+            color: #fff;
+            border-color: #2a4365;
+        }
+        .btn-toggle-active:hover {
+            background: #2a4365;
+        }
+
+        /* Tree Styles */
+        ul {
+            list-style-type: none;
+            padding-left: 20px;
+        }
+        li {
+            margin: 2px 0;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.1s;
+        }
+        .header:hover {
+            background-color: #f8fafc;
+        }
+        
+        .toggle {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            flex-grow: 0;
+        }
+        .branch > .header > .toggle::before {
+            content: '▶';
+            display: inline-block;
+            margin-right: 10px;
+            font-size: 0.75rem;
+            transition: transform 0.2s ease;
+            color: #a0aec0;
+        }
+        .branch.open > .header > .toggle::before {
+            transform: rotate(90deg);
+        }
+        
+        .branch > ul {
+            display: none;
+            border-left: 1px solid #e2e8f0;
+            margin-left: 6px;
+        }
+        .branch.open > ul {
+            display: block;
+        }
+
+        .node-name {
+            font-weight: 600;
+            color: #2d3748;
+        }
+        .policy {
+            font-size: 0.75rem;
+            color: #3182ce;
+            margin-left: 8px;
+            font-style: italic;
+        }
+        .policy-master {
+            font-size: 0.7rem;
+            color: #2f855a;
+            background: #e6fffa;
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            border: 1px solid #9ae6b4;
+            display: inline-block;
+            font-weight: 600;
+        }
+        .bundle-tag {
+            font-size: 0.7rem;
+            color: #744210;
+            background: #fffaf0;
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            border: 1px solid #f6ad55;
+            display: inline-block;
+            font-weight: 600;
+        }
+        .policy-muted .policy {
+            color: #a0aec0;
+        }
+        .filter-muted > .header .node-name {
+            color: #a0aec0;
+            font-weight: 500;
+        }
+        .filter-muted > .header {
+            background-color: #f8fafc;
+        }
+        .groups {
+            font-size: 0.7rem;
+            color: #4a5568;
+            background: #ebf4ff;
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            border: 1px solid #bee3f8;
+            display: inline-block;
+        }
+        
+        /* Branch Controls */
+        .branch-controls {
+            margin-left: 15px;
+            display: flex;
+            gap: 4px;
+            opacity: 0.2;
+            transition: opacity 0.2s;
+        }
+        .header:hover .branch-controls {
+            opacity: 1;
+        }
+        .small-btn {
+            padding: 2px 5px;
+            font-size: 0.6rem;
+            cursor: pointer;
+            border-radius: 3px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            color: #718096;
+        }
+        .small-btn:hover {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+
+        .leaf .header {
+            padding-left: 24px;
+        }
+
+        .loader {
+            margin: 15px 0;
+            padding: 12px;
+            background: #f0f4f8;
+            border-radius: 6px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .loader-hint {
+            font-size: 0.75rem;
+            color: #4a5568;
+            margin: 6px 0 8px 0;
+        }
+
+        .loader input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .file-info {
+            font-size: 0.75rem;
+            color: #4a5568;
+            margin-top: 8px;
+        }
+
+        .loading {
+            color: #4a5568;
+            font-style: italic;
+        }
+
+        .error {
+            color: #e53e3e;
+            padding: 8px;
+            background: #fed7d7;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+
+        .resource-details {
+            display: none;
+            margin-left: 0;
+        }
+
+        .resource-details.visible {
+            display: inline-block;
+            margin-left: 4px;
+        }
+
+        .fallback-types, .related-types, .group-types {
+            font-size: 0.7rem;
+            margin-left: 0;
+            padding: 4px 6px;
+            border-radius: 4px;
+            display: block;
+            line-height: 1.3;
+        }
+
+        .fallback-types {
+            color: #975a16;
+            background: #fefcbf;
+            border: 1px solid #f6ad55;
+        }
+
+        .related-types {
+            color: #22543d;
+            background: #c6f6d5;
+            border: 1px solid #9ae6b4;
+        }
+        .group-types {
+            color: #4a5568;
+            background: #ebf4ff;
+            border: 1px solid #bee3f8;
+        }
+
+        .toggle-details-btn {
+            padding: 3px 7px;
+            font-size: 0.65rem;
+            cursor: pointer;
+            border-radius: 3px;
+            border: 1px solid #cbd5e0;
+            background: #fff;
+            color: #2d3748;
+            margin-left: 6px;
+            font-weight: 500;
+            transition: all 0.1s;
+            white-space: nowrap;
+            display: inline-block;
+        }
+
+        .toggle-details-btn:hover {
+            background: #edf2f7;
+            border-color: #a0aec0;
+        }
+
+        .image-btn {
+            padding: 3px 7px;
+            font-size: 0.65rem;
+            cursor: pointer;
+            border-radius: 3px;
+            border: 1px solid #cbd5e0;
+            background: #fff;
+            color: #2d3748;
+            margin-left: 6px;
+            font-weight: 500;
+            transition: all 0.1s;
+            white-space: nowrap;
+            display: inline-block;
+        }
+
+        .image-btn:hover {
+            background: #edf2f7;
+            border-color: #a0aec0;
+        }
+        .caption-missing-tag {
+            font-size: 0.65rem;
+            color: #742a2a;
+            background: #fff5f5;
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
+            border: 1px solid #feb2b2;
+            display: inline-block;
+            font-weight: 600;
+        }
+
+        .image-details {
+            display: none;
+            margin-left: 0;
+        }
+
+        .image-details.visible {
+            display: inline-block;
+            margin-left: 4px;
+        }
+        .image-details > span {
+            display: block;
+        }
+
+        .image-details img {
+            max-width: 220px;
+            max-height: 160px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+            display: block;
+            margin-top: 6px;
+        }
+        .image-caption {
+            font-size: 0.7rem;
+            color: #4a5568;
+            margin-top: 4px;
+            text-align: center;
+        }
+
+        body.dark-mode {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        body.dark-mode .container {
+            background: #111827;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+        }
+        body.dark-mode h1 {
+            color: #e5e7eb;
+        }
+        body.dark-mode .node-name {
+            color: #e2e8f0;
+        }
+        body.dark-mode .file-info,
+        body.dark-mode .loader-hint,
+        body.dark-mode .loading {
+            color: #cbd5e1;
+        }
+        body.dark-mode .patron-portal-indicator {
+            background: #0b1220;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+        body.dark-mode .filter-muted > .header {
+            background-color: #0b1220;
+        }
+        body.dark-mode .filter-muted > .header .node-name {
+            color: #94a3b8;
+        }
+        body.dark-mode .policy-muted > .header .node-name {
+            color: #94a3b8;
+        }
+        body.dark-mode .btn,
+        body.dark-mode .small-btn,
+        body.dark-mode .toggle-details-btn,
+        body.dark-mode .image-btn,
+        body.dark-mode .icon-btn {
+            background: #0b1220;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+        body.dark-mode .btn:hover,
+        body.dark-mode .small-btn:hover,
+        body.dark-mode .toggle-details-btn:hover,
+        body.dark-mode .image-btn:hover,
+        body.dark-mode .icon-btn:hover {
+            background: #111827;
+            border-color: #475569;
+        }
+        body.dark-mode .btn-primary {
+            background: #2563eb;
+            border-color: #1d4ed8;
+        }
+        body.dark-mode .btn-primary:hover {
+            background: #1d4ed8;
+        }
+        body.dark-mode .btn-toggle-active {
+            background: #1e3a8a;
+            border-color: #1e40af;
+        }
+        body.dark-mode .header:hover {
+            background-color: #111827;
+        }
+        body.dark-mode .branch > ul {
+            border-left-color: #1f2937;
+        }
+        body.dark-mode .policy,
+        body.dark-mode .policy-master,
+        body.dark-mode .bundle-tag,
+        body.dark-mode .caption-missing-tag {
+            border-color: #334155;
+        }
+        body.dark-mode .policy {
+            color: #cbd5f5;
+            background: #0b1220;
+        }
+        body.dark-mode .policy-master {
+            background: #312e81;
+            color: #e0e7ff;
+        }
+        body.dark-mode .bundle-tag {
+            background: #3f1d7a;
+            color: #f5d0fe;
+        }
+        body.dark-mode .fallback-types {
+            color: #fde68a;
+            background: #3b2f16;
+            border-color: #7c5a1a;
+        }
+        body.dark-mode .related-types {
+            color: #bbf7d0;
+            background: #1c3d2a;
+            border-color: #2f6b47;
+        }
+        body.dark-mode .group-types {
+            color: #bfdbfe;
+            background: #0b1f3a;
+            border-color: #1d4ed8;
+        }
+        body.dark-mode .image-details img {
+            border-color: #334155;
+        }
+        body.dark-mode .image-caption {
+            color: #cbd5e1;
+        }
+        body.dark-mode .error {
+            background: #3b0a0a;
+            color: #fecaca;
+        }
+        body.dark-mode .loader {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+        }
+        body.dark-mode .loader input {
+            background: #0b1220;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+
+        .patron-portal-indicator {
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid #cbd5e0;
+            background: #fff;
+            color: #2d3748;
+            margin-left: 6px;
+            font-weight: 500;
+            transition: all 0.1s;
+            white-space: nowrap;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button class="icon-btn" id="dark-mode-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+                <h1>WCO Resource Types Viewer</h1>
+            </div>
+            <div class="global-controls">Filters:
+                <button class="btn" id="filter-portal">👁️ Patron Portal Items</button>
+                <button class="btn" id="filter-no-policy">Items with No Policy</button>
+                <button class="btn" id="filter-no-auth">Items with No Authorizations</button>
+                <button class="btn" id="filter-no-image">Items with No Image</button>
+                <button class="btn" id="filter-no-fallback">Items with No Fallback Type</button>
+                <button class="btn" id="filter-no-related">Items with No Related Type</button>
+                <br><br>View Controls:
+                <button class="btn" id="expand-all">Expand All</button>
+                <button class="btn" id="collapse-all">Collapse All</button>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                Images: <button class="btn" id="show-images">Show All</button>
+                <button class="btn" id="hide-images">Hide All</button>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                Auth Groups:
+                <button class="btn" id="show-auth-groups">Show All</button>
+                <button class="btn" id="hide-auth-groups">Hide All</button>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                Fallback & Related Types:
+                <button class="btn" id="show-related-fallback">Show All</button>
+                <button class="btn" id="hide-related-fallback">Hide All</button>
+                <br><br>
+            </div>
+        </div>
+        
+        <div class="loader-hint">Update via WCO: <b>Resources -&gt; Find Resource Types</b>. Load custom report <b>"Check Resource Types"</b> and <b>Export As CSV</b>.</div>
+        <div class="loader">
+            <input type="file" id="csv-file" accept=".csv" />
+            <button class="btn btn-primary" id="load-btn">Load CSV</button>
+        </div>
+        <div id="file-info" class="file-info"></div>
+        <div id="error-container"></div>
+        
+        <div id="tree"></div>
+    </div>
+
+    <script>
+        let portalFilterEnabled = false;
+        let noPolicyFilterEnabled = false;
+        let noAuthFilterEnabled = false;
+        let noImageFilterEnabled = false;
+        let noFallbackFilterEnabled = false;
+        let noRelatedFilterEnabled = false;
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length === 0) return [];
+
+            // Parse header
+            const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const resources = [];
+
+            // Parse rows
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i];
+                if (!line.trim()) continue;
+
+                // Simple CSV parsing that handles quoted fields
+                const row = [];
+                let current = '';
+                let inQuotes = false;
+
+                for (let j = 0; j < line.length; j++) {
+                    const char = line[j];
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        row.push(current.trim().replace(/^"|"$/g, ''));
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                row.push(current.trim().replace(/^"|"$/g, ''));
+
+                if (row.length === header.length) {
+                    const obj = {};
+                    header.forEach((h, idx) => {
+                        obj[h] = row[idx];
+                    });
+                    resources.push(obj);
+                }
+            }
+
+            return resources;
+        }
+
+        function buildTreeStructure(resources) {
+            const tree = {};
+
+            resources.forEach(resource => {
+                const path = resource['Path'] || '';
+                const parts = path.split(' -- ').map(p => p.trim()).filter(p => p);
+
+                if (parts.length === 0) return;
+
+                let currentLevel = tree;
+
+                // Build the nested structure and capture metadata on the node itself
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (!currentLevel[part]) {
+                        currentLevel[part] = { '__meta__': null };
+                    }
+                    currentLevel = currentLevel[part];
+                }
+
+                currentLevel['__meta__'] = {
+                    name: parts[parts.length - 1],
+                    type: resource['Resource Type'],
+                    policy: resource['Inherit Policies From'],
+                    groups: resource['Authorizing Groups'],
+                    fallbackTypes: resource['Fallback Types'],
+                    relatedTypes: resource['Related Types'],
+                    visibleInPatronPortal: resource['Visible In Patron Portal'],
+                    requiresAuthorization: resource['Requires Authorization'],
+                    policyChildren: resource['Policy Children'],
+                    inBundle: resource['In Bundle'],
+                    imageUrl: resource['Image URL'],
+                    imageCaption: resource['Image Caption']
+                };
+            });
+
+            return tree;
+        }
+
+        function htmlspecialchars(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        function buildResourceMetaHTML(resource) {
+            let html = '';
+            const isTruthy = (value) => {
+                if (!value) return false;
+                const normalized = String(value).trim().toLowerCase();
+                return normalized === 't' || normalized === 'true' || normalized === 'yes' || normalized === '1';
+            };
+
+            if (resource.policy && resource.policy.trim()) {
+                html += ' <span class="policy">- Policy: ' + htmlspecialchars(resource.policy) + '</span>';
+            }
+            const policyChildrenValue = resource.policyChildren ? resource.policyChildren.trim().replace(/^"|"$/g, '') : '';
+            if (policyChildrenValue && policyChildrenValue !== '[]') {
+                html += ' <span class="policy-master">Policy Master</span>';
+            }
+            if (isTruthy(resource.inBundle)) {
+                html += ' <span class="bundle-tag">In Bundle</span>';
+            }
+
+            if (isTruthy(resource.visibleInPatronPortal)) {
+                html += ' <span class="patron-portal-indicator" title="Visible in Patron Portal">👁️</span>';
+            }
+
+            if (isTruthy(resource.requiresAuthorization) && resource.groups && resource.groups.trim() && resource.groups !== '[]') {
+                let groupsStr = resource.groups.replace(/^\[|\]$/g, '').replace(/^"|"$/g, '');
+                if (groupsStr) {
+                    html += ' <button class="toggle-details-btn" data-type="groups" title="Show authorisation groups">Authorisation Groups</button>';
+                    html += '<span class="resource-details groups-details"><span class="group-types">' + htmlspecialchars(groupsStr) + '</span></span>';
+                }
+            }
+
+            if (resource.fallbackTypes && resource.fallbackTypes.trim() && resource.fallbackTypes !== '[]') {
+                html += ' <button class="toggle-details-btn" data-type="fallback" title="Show fallback types">Show Fallback Types</button>';
+                let fallbackStr = resource.fallbackTypes.replace(/^\[|\]$/g, '').replace(/\|/g, '<br>').replace(/^"|"$/g, '');
+                if (fallbackStr) {
+                    html += '<span class="resource-details fallback-details"><span class="fallback-types">' + htmlspecialchars(fallbackStr).replace(/&lt;br&gt;/g, '<br>') + '</span></span>';
+                }
+            }
+
+            if (resource.relatedTypes && resource.relatedTypes.trim() && resource.relatedTypes !== '[]') {
+                html += ' <button class="toggle-details-btn" data-type="related" title="Show related types">Show Related Types</button>';
+                let relatedStr = resource.relatedTypes.replace(/^\[|\]$/g, '').replace(/\|/g, '<br>').replace(/^"|"$/g, '');
+                if (relatedStr) {
+                    html += '<span class="resource-details related-details"><span class="related-types">' + htmlspecialchars(relatedStr).replace(/&lt;br&gt;/g, '<br>') + '</span></span>';
+                }
+            }
+
+            if (resource.imageUrl && resource.imageUrl.trim()) {
+                const cleanUrl = resource.imageUrl.trim().replace(/^"|"$/g, '');
+                if (cleanUrl) {
+                    const captionValue = resource.imageCaption ? resource.imageCaption.trim().replace(/^"|"$/g, '') : '';
+                    const captionMissing = !captionValue;
+                    const captionText = captionMissing ? 'Placeholder Image' : captionValue;
+                    html += ' <button class="image-btn" title="Show image">Show Image</button>';
+                    if (captionMissing) {
+                        html += ' <span class="caption-missing-tag">Image Caption Missing</span>';
+                    }
+                    html += '<span class="image-details"><img src="' + htmlspecialchars(cleanUrl) + '" alt="Image for ' + htmlspecialchars(resource.name || resource.type || '') + '">';
+                    html += '<span class="image-caption">' + htmlspecialchars(captionText) + '</span>';
+                    html += '</span>';
+                }
+            }
+
+            return html;
+        }
+
+        function buildTreeHTML(tree) {
+            let html = '<ul>';
+
+            const keys = Object.keys(tree).filter(k => !k.startsWith('__')).sort();
+            const isTruthy = (value) => {
+                if (!value) return false;
+                const normalized = String(value).trim().toLowerCase();
+                return normalized === 't' || normalized === 'true' || normalized === 'yes' || normalized === '1';
+            };
+            
+            // Add sub-branches first
+            keys.forEach(key => {
+                const subtree = tree[key];
+                const childKeys = Object.keys(subtree).filter(k => !k.startsWith('__')).sort();
+                const meta = subtree['__meta__'];
+                const isVisible = !!(meta && isTruthy(meta.visibleInPatronPortal));
+                const hasPolicy = !!(meta && meta.policy && meta.policy.trim());
+                const noPolicy = !hasPolicy;
+                const requiresAuth = !!(meta && isTruthy(meta.requiresAuthorization));
+                const hasImage = !!(meta && meta.imageUrl && meta.imageUrl.trim());
+                const noImage = !hasImage;
+                const hasFallback = !!(meta && meta.fallbackTypes && meta.fallbackTypes.trim() && meta.fallbackTypes.trim() !== '[]');
+                const noFallback = !hasFallback;
+                const hasRelated = !!(meta && meta.relatedTypes && meta.relatedTypes.trim() && meta.relatedTypes.trim() !== '[]');
+                const noRelated = !hasRelated;
+
+                if (childKeys.length > 0) {
+                    html += '<li class="branch" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '">';
+                    html += '<div class="header">';
+                    html += '<span class="toggle"><span class="node-name">' + htmlspecialchars(key) + '</span></span>';
+                    if (meta) {
+                        html += buildResourceMetaHTML(meta);
+                    }
+                    html += '<span class="branch-controls">';
+                    html += '<button class="small-btn expand-sub" title="Expand all children">Expand All</button>';
+                    html += '<button class="small-btn collapse-sub" title="Collapse all children">Collapse All</button>';
+                    html += '</span>';
+                    html += '</div>';
+                    html += buildTreeHTML(subtree);
+                    html += '</li>';
+                } else {
+                    html += '<li class="leaf" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '">';
+                    html += '<div class="header">';
+                    html += '<span class="node-name">' + htmlspecialchars(key) + '</span>';
+                    if (meta) {
+                        html += buildResourceMetaHTML(meta);
+                    }
+                    html += '</div>';
+                    html += '</li>';
+                }
+            });
+
+            html += '</ul>';
+            return html;
+        }
+
+        function loadAndRenderCSV(file) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const csv = e.target.result;
+                    const resources = parseCSV(csv);
+                    
+                    if (resources.length === 0) {
+                        showError('No resources found in CSV file');
+                        return;
+                    }
+
+                    const tree = buildTreeStructure(resources);
+                    const html = buildTreeHTML(tree);
+                    
+                    document.getElementById('tree').innerHTML = html;
+                    document.getElementById('file-info').innerHTML = 
+                        '<strong>Loaded:</strong> ' + file.name + ' (' + resources.length + ' resources)';
+                    document.getElementById('error-container').innerHTML = '';
+                    
+                    // Re-attach event listeners
+                    attachEventListeners();
+                    applyFilters();
+                } catch (error) {
+                    showError('Error parsing CSV: ' + error.message);
+                }
+            };
+
+            reader.onerror = function() {
+                showError('Error reading file');
+            };
+
+            reader.readAsText(file);
+        }
+
+        function showError(message) {
+            document.getElementById('error-container').innerHTML = 
+                '<div class="error">' + htmlspecialchars(message) + '</div>';
+        }
+
+        function attachEventListeners() {
+            // Toggle individual branch
+            document.querySelectorAll('.toggle').forEach(item => {
+                item.addEventListener('click', () => {
+                    if (window.getSelection().toString().length > 0) return;
+                    item.closest('.branch').classList.toggle('open');
+                });
+            });
+
+            // Global Expand/Collapse
+            const expandBtn = document.getElementById('expand-all');
+            const collapseBtn = document.getElementById('collapse-all');
+            const filterBtn = document.getElementById('filter-portal');
+            const noPolicyBtn = document.getElementById('filter-no-policy');
+            const noAuthBtn = document.getElementById('filter-no-auth');
+            const noImageBtn = document.getElementById('filter-no-image');
+            const noFallbackBtn = document.getElementById('filter-no-fallback');
+            const noRelatedBtn = document.getElementById('filter-no-related');
+            const showImagesBtn = document.getElementById('show-images');
+            const hideImagesBtn = document.getElementById('hide-images');
+            const showAuthGroupsBtn = document.getElementById('show-auth-groups');
+            const hideAuthGroupsBtn = document.getElementById('hide-auth-groups');
+            const showRelatedFallbackBtn = document.getElementById('show-related-fallback');
+            const hideRelatedFallbackBtn = document.getElementById('hide-related-fallback');
+            
+            expandBtn.removeEventListener('click', expandAll);
+            collapseBtn.removeEventListener('click', collapseAll);
+            filterBtn.removeEventListener('click', togglePortalFilter);
+            noPolicyBtn.removeEventListener('click', toggleNoPolicyFilter);
+            noAuthBtn.removeEventListener('click', toggleNoAuthFilter);
+            noImageBtn.removeEventListener('click', toggleNoImageFilter);
+            noFallbackBtn.removeEventListener('click', toggleNoFallbackFilter);
+            noRelatedBtn.removeEventListener('click', toggleNoRelatedFilter);
+            showImagesBtn.removeEventListener('click', showAllImages);
+            hideImagesBtn.removeEventListener('click', hideAllImages);
+            showAuthGroupsBtn.removeEventListener('click', showAllAuthGroups);
+            hideAuthGroupsBtn.removeEventListener('click', hideAllAuthGroups);
+            showRelatedFallbackBtn.removeEventListener('click', showAllRelatedFallback);
+            hideRelatedFallbackBtn.removeEventListener('click', hideAllRelatedFallback);
+            
+            expandBtn.addEventListener('click', expandAll);
+            collapseBtn.addEventListener('click', collapseAll);
+            filterBtn.addEventListener('click', togglePortalFilter);
+            noPolicyBtn.addEventListener('click', toggleNoPolicyFilter);
+            noAuthBtn.addEventListener('click', toggleNoAuthFilter);
+            noImageBtn.addEventListener('click', toggleNoImageFilter);
+            noFallbackBtn.addEventListener('click', toggleNoFallbackFilter);
+            noRelatedBtn.addEventListener('click', toggleNoRelatedFilter);
+            showImagesBtn.addEventListener('click', showAllImages);
+            hideImagesBtn.addEventListener('click', hideAllImages);
+            showAuthGroupsBtn.addEventListener('click', showAllAuthGroups);
+            hideAuthGroupsBtn.addEventListener('click', hideAllAuthGroups);
+            showRelatedFallbackBtn.addEventListener('click', showAllRelatedFallback);
+            hideRelatedFallbackBtn.addEventListener('click', hideAllRelatedFallback);
+
+            // Sub-branch Expand/Collapse
+            document.querySelectorAll('.expand-sub').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const parentBranch = btn.closest('.branch');
+                    parentBranch.classList.add('open');
+                    parentBranch.querySelectorAll('.branch').forEach(b => b.classList.add('open'));
+                });
+            });
+            
+            document.querySelectorAll('.collapse-sub').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const parentBranch = btn.closest('.branch');
+                    parentBranch.querySelectorAll('.branch').forEach(b => b.classList.remove('open'));
+                    parentBranch.classList.remove('open');
+                });
+            });
+
+            // Toggle resource details (fallback and related types)
+            document.querySelectorAll('.toggle-details-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const details = btn.nextElementSibling;
+                    if (details && details.classList.contains('resource-details')) {
+                        details.classList.toggle('visible');
+                    }
+                });
+            });
+
+            // Toggle image details
+            document.querySelectorAll('.image-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    let details = btn.nextElementSibling;
+                    while (details && !details.classList.contains('image-details')) {
+                        details = details.nextElementSibling;
+                    }
+                    if (details) {
+                        details.classList.toggle('visible');
+                    }
+                });
+            });
+        }
+
+        function togglePortalFilter() {
+            portalFilterEnabled = !portalFilterEnabled;
+            const filterBtn = document.getElementById('filter-portal');
+            if (portalFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleNoPolicyFilter() {
+            noPolicyFilterEnabled = !noPolicyFilterEnabled;
+            const filterBtn = document.getElementById('filter-no-policy');
+            if (noPolicyFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleNoAuthFilter() {
+            noAuthFilterEnabled = !noAuthFilterEnabled;
+            const filterBtn = document.getElementById('filter-no-auth');
+            if (noAuthFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleNoImageFilter() {
+            noImageFilterEnabled = !noImageFilterEnabled;
+            const filterBtn = document.getElementById('filter-no-image');
+            if (noImageFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleNoFallbackFilter() {
+            noFallbackFilterEnabled = !noFallbackFilterEnabled;
+            const filterBtn = document.getElementById('filter-no-fallback');
+            if (noFallbackFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleNoRelatedFilter() {
+            noRelatedFilterEnabled = !noRelatedFilterEnabled;
+            const filterBtn = document.getElementById('filter-no-related');
+            if (noRelatedFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const root = document.getElementById('tree');
+            if (!root) return;
+            const rootList = root.querySelector('ul');
+            if (!rootList) return;
+
+            const walk = (li) => {
+                const selfVisible = li.dataset.visible === 'true';
+                const selfNoPolicy = li.dataset.policyEmpty === 'true';
+                const selfNoAuth = li.dataset.authRequired === 'false';
+                const selfNoImage = li.dataset.imageEmpty === 'true';
+                const selfNoFallback = li.dataset.fallbackEmpty === 'true';
+                const selfNoRelated = li.dataset.relatedEmpty === 'true';
+                let anyChildCombined = false;
+                const childList = li.querySelector(':scope > ul');
+                if (childList) {
+                    Array.from(childList.children).forEach(child => {
+                        if (walk(child)) anyChildCombined = true;
+                    });
+                }
+                const selfPasses = (!portalFilterEnabled || selfVisible) && (!noPolicyFilterEnabled || selfNoPolicy) && (!noAuthFilterEnabled || selfNoAuth) && (!noImageFilterEnabled || selfNoImage) && (!noFallbackFilterEnabled || selfNoFallback) && (!noRelatedFilterEnabled || selfNoRelated);
+                const shouldShow = selfPasses || anyChildCombined;
+                li.style.display = shouldShow ? '' : 'none';
+                if (noPolicyFilterEnabled && li.classList.contains('branch') && li.dataset.policyEmpty === 'false') {
+                    li.classList.add('policy-muted');
+                } else {
+                    li.classList.remove('policy-muted');
+                }
+                if (shouldShow && !selfPasses && (portalFilterEnabled || noPolicyFilterEnabled || noAuthFilterEnabled || noImageFilterEnabled || noFallbackFilterEnabled || noRelatedFilterEnabled)) {
+                    li.classList.add('filter-muted');
+                } else {
+                    li.classList.remove('filter-muted');
+                }
+                return shouldShow;
+            };
+
+            Array.from(rootList.children).forEach(li => walk(li));
+        }
+
+        function expandAll() {
+            document.querySelectorAll('.branch').forEach(b => b.classList.add('open'));
+        }
+
+        function collapseAll() {
+            document.querySelectorAll('.branch').forEach(b => b.classList.remove('open'));
+        }
+
+        function showAllImages() {
+            document.querySelectorAll('.image-details').forEach(el => el.classList.add('visible'));
+        }
+
+        function hideAllImages() {
+            document.querySelectorAll('.image-details').forEach(el => el.classList.remove('visible'));
+        }
+
+        function showAllAuthGroups() {
+            document.querySelectorAll('.groups-details').forEach(el => el.classList.add('visible'));
+        }
+
+        function hideAllAuthGroups() {
+            document.querySelectorAll('.groups-details').forEach(el => el.classList.remove('visible'));
+        }
+
+        function showAllRelatedFallback() {
+            document.querySelectorAll('.related-details, .fallback-details').forEach(el => el.classList.add('visible'));
+        }
+
+        function hideAllRelatedFallback() {
+            document.querySelectorAll('.related-details, .fallback-details').forEach(el => el.classList.remove('visible'));
+        }
+
+        // Load button handler
+        document.getElementById('load-btn').addEventListener('click', () => {
+            const file = document.getElementById('csv-file').files[0];
+            if (!file) {
+                showError('Please select a CSV file');
+                return;
+            }
+            loadAndRenderCSV(file);
+        });
+
+        // Allow loading by pressing Enter in file input
+        document.getElementById('csv-file').addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                loadAndRenderCSV(e.target.files[0]);
+            }
+        });
+
+        const darkModeBtn = document.getElementById('dark-mode-toggle');
+        if (darkModeBtn) {
+            darkModeBtn.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+                const isDark = document.body.classList.contains('dark-mode');
+                darkModeBtn.textContent = isDark ? '☀️' : '🌙';
+            });
+        }
+    </script>
+</body>
+</html>
