@@ -237,6 +237,42 @@
             border-radius: 4px;
             font-size: 12px;
         }
+        .search-box {
+            margin: 10px 0 15px 0;
+            padding: 10px 12px;
+            background: #f0f4f8;
+            border-radius: 6px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .search-box label {
+            font-size: 12px;
+            color: #2d3748;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .search-box input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .search-filters {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            font-size: 12px;
+            color: #2d3748;
+            white-space: nowrap;
+        }
+        .search-filters label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
 
         .file-info {
             font-size: 0.75rem;
@@ -292,6 +328,11 @@
             color: #4a5568;
             background: #ebf4ff;
             border: 1px solid #bee3f8;
+        }
+        .group-types.muted {
+            color: #a0aec0;
+            background: #f8fafc;
+            border: 1px dashed #e2e8f0;
         }
 
         .toggle-details-btn {
@@ -474,6 +515,11 @@
             background: #0b1f3a;
             border-color: #1d4ed8;
         }
+        body.dark-mode .group-types.muted {
+            color: #64748b;
+            background: #0b1220;
+            border-color: #334155;
+        }
         body.dark-mode .image-details img {
             border-color: #334155;
         }
@@ -492,6 +538,21 @@
             background: #0b1220;
             color: #e2e8f0;
             border-color: #334155;
+        }
+        body.dark-mode .search-box {
+            background: #0b1220;
+            border: 1px solid #1f2937;
+        }
+        body.dark-mode .search-box label {
+            color: #e2e8f0;
+        }
+        body.dark-mode .search-box input {
+            background: #0b1220;
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+        body.dark-mode .search-filters {
+            color: #e2e8f0;
         }
 
         .patron-portal-indicator {
@@ -546,6 +607,15 @@
             <input type="file" id="csv-file" accept=".csv" />
             <button class="btn btn-primary" id="load-btn">Load CSV</button>
         </div>
+        <div class="search-box">
+            <label for="search-box">Filter Text:</label>
+            <div class="search-filters">
+                <label><input type="checkbox" id="search-name" checked> Name</label>
+                <label><input type="checkbox" id="search-policy" checked> Policy</label>
+                <label><input type="checkbox" id="search-auth" checked> Authorisation</label>
+            </div>
+            <input type="text" id="search-box" placeholder="Type to filter resources..." />
+        </div>
         <div id="file-info" class="file-info"></div>
         <div id="error-container"></div>
         
@@ -559,6 +629,7 @@
         let noImageFilterEnabled = false;
         let noFallbackFilterEnabled = false;
         let noRelatedFilterEnabled = false;
+        let searchQuery = '';
 
         function parseCSV(text) {
             const lines = text.trim().split('\n');
@@ -676,11 +747,15 @@
                 html += ' <span class="patron-portal-indicator" title="Visible in Patron Portal">👁️</span>';
             }
 
-            if (isTruthy(resource.requiresAuthorization) && resource.groups && resource.groups.trim() && resource.groups !== '[]') {
+            if (resource.groups && resource.groups.trim() && resource.groups !== '[]') {
                 let groupsStr = resource.groups.replace(/^\[|\]$/g, '').replace(/^"|"$/g, '');
                 if (groupsStr) {
-                    html += ' <button class="toggle-details-btn" data-type="groups" title="Show authorisation groups">Authorisation Groups</button>';
-                    html += '<span class="resource-details groups-details"><span class="group-types">' + htmlspecialchars(groupsStr) + '</span></span>';
+                    const requiresAuth = isTruthy(resource.requiresAuthorization);
+                    const groupClass = requiresAuth ? 'group-types' : 'group-types muted';
+                    const titleText = requiresAuth ? 'Show authorisation groups' : 'Authorisation not required';
+                    const buttonText = requiresAuth ? 'Authorisation Groups' : 'Authorisation Groups (Requires Authorisation Unchecked)';
+                    html += ' <button class="toggle-details-btn" data-type="groups" title="' + titleText + '">' + buttonText + '</button>';
+                    html += '<span class="resource-details groups-details"><span class="' + groupClass + '">' + htmlspecialchars(groupsStr) + '</span></span>';
                 }
             }
 
@@ -744,9 +819,11 @@
                 const noFallback = !hasFallback;
                 const hasRelated = !!(meta && meta.relatedTypes && meta.relatedTypes.trim() && meta.relatedTypes.trim() !== '[]');
                 const noRelated = !hasRelated;
-
+                const searchName = (meta && (meta.name || meta.type)) ? (meta.name || meta.type) : key;
+                const searchPolicy = meta && meta.policy ? meta.policy : '';
+                const searchAuth = meta && meta.groups ? meta.groups : '';
                 if (childKeys.length > 0) {
-                    html += '<li class="branch" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '">';
+                    html += '<li class="branch" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '" data-search-name="' + htmlspecialchars(searchName) + '" data-search-policy="' + htmlspecialchars(searchPolicy) + '" data-search-auth="' + htmlspecialchars(searchAuth) + '">';
                     html += '<div class="header">';
                     html += '<span class="toggle"><span class="node-name">' + htmlspecialchars(key) + '</span></span>';
                     if (meta) {
@@ -760,7 +837,7 @@
                     html += buildTreeHTML(subtree);
                     html += '</li>';
                 } else {
-                    html += '<li class="leaf" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '">';
+                    html += '<li class="leaf" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '" data-search-name="' + htmlspecialchars(searchName) + '" data-search-policy="' + htmlspecialchars(searchPolicy) + '" data-search-auth="' + htmlspecialchars(searchAuth) + '">';
                     html += '<div class="header">';
                     html += '<span class="node-name">' + htmlspecialchars(key) + '</span>';
                     if (meta) {
@@ -840,6 +917,10 @@
             const hideAuthGroupsBtn = document.getElementById('hide-auth-groups');
             const showRelatedFallbackBtn = document.getElementById('show-related-fallback');
             const hideRelatedFallbackBtn = document.getElementById('hide-related-fallback');
+            const searchBox = document.getElementById('search-box');
+            const searchName = document.getElementById('search-name');
+            const searchPolicy = document.getElementById('search-policy');
+            const searchAuth = document.getElementById('search-auth');
             
             expandBtn.removeEventListener('click', expandAll);
             collapseBtn.removeEventListener('click', collapseAll);
@@ -870,6 +951,16 @@
             hideAuthGroupsBtn.addEventListener('click', hideAllAuthGroups);
             showRelatedFallbackBtn.addEventListener('click', showAllRelatedFallback);
             hideRelatedFallbackBtn.addEventListener('click', hideAllRelatedFallback);
+            if (searchBox) {
+                searchBox.addEventListener('input', () => {
+                    searchQuery = searchBox.value.trim().toLowerCase();
+                    applyFilters();
+                });
+            }
+            [searchName, searchPolicy, searchAuth].forEach(cb => {
+                if (!cb) return;
+                cb.addEventListener('change', () => applyFilters());
+            });
 
             // Sub-branch Expand/Collapse
             document.querySelectorAll('.expand-sub').forEach(btn => {
@@ -995,6 +1086,16 @@
                 const selfNoImage = li.dataset.imageEmpty === 'true';
                 const selfNoFallback = li.dataset.fallbackEmpty === 'true';
                 const selfNoRelated = li.dataset.relatedEmpty === 'true';
+                const includeName = document.getElementById('search-name')?.checked;
+                const includePolicy = document.getElementById('search-policy')?.checked;
+                const includeAuth = document.getElementById('search-auth')?.checked;
+                let selfSearchText = '';
+                if (includeName) selfSearchText += ' ' + (li.dataset.searchName || '');
+                if (includePolicy) selfSearchText += ' ' + (li.dataset.searchPolicy || '');
+                if (includeAuth) selfSearchText += ' ' + (li.dataset.searchAuth || '');
+                selfSearchText = selfSearchText.toLowerCase().trim();
+                const anyCategorySelected = includeName || includePolicy || includeAuth;
+                const selfSearchMatch = !searchQuery || (anyCategorySelected && selfSearchText.includes(searchQuery));
                 let anyChildCombined = false;
                 const childList = li.querySelector(':scope > ul');
                 if (childList) {
@@ -1003,14 +1104,15 @@
                     });
                 }
                 const selfPasses = (!portalFilterEnabled || selfVisible) && (!noPolicyFilterEnabled || selfNoPolicy) && (!noAuthFilterEnabled || selfNoAuth) && (!noImageFilterEnabled || selfNoImage) && (!noFallbackFilterEnabled || selfNoFallback) && (!noRelatedFilterEnabled || selfNoRelated);
-                const shouldShow = selfPasses || anyChildCombined;
+                const shouldShow = (selfPasses && selfSearchMatch) || anyChildCombined;
                 li.style.display = shouldShow ? '' : 'none';
                 if (noPolicyFilterEnabled && li.classList.contains('branch') && li.dataset.policyEmpty === 'false') {
                     li.classList.add('policy-muted');
                 } else {
                     li.classList.remove('policy-muted');
                 }
-                if (shouldShow && !selfPasses && (portalFilterEnabled || noPolicyFilterEnabled || noAuthFilterEnabled || noImageFilterEnabled || noFallbackFilterEnabled || noRelatedFilterEnabled)) {
+                const selfMatchesAll = selfPasses && selfSearchMatch;
+                if (shouldShow && !selfMatchesAll && (portalFilterEnabled || noPolicyFilterEnabled || noAuthFilterEnabled || noImageFilterEnabled || noFallbackFilterEnabled || noRelatedFilterEnabled || searchQuery)) {
                     li.classList.add('filter-muted');
                 } else {
                     li.classList.remove('filter-muted');
