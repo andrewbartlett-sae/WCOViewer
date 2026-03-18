@@ -875,6 +875,8 @@
                     
                     // Re-attach event listeners
                     attachEventListeners();
+                    const searchBox = document.getElementById('search-box');
+                    searchQuery = searchBox ? searchBox.value.trim().toLowerCase() : '';
                     applyFilters();
                 } catch (error) {
                     showError('Error parsing CSV: ' + error.message);
