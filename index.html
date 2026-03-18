@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WCO Resource Type Viewer</title>
     <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             font-size: 14px;
@@ -12,6 +15,7 @@
             background-color: #f4f7f6;
             color: #333;
             padding: 15px;
+            overflow-x: hidden;
         }
         .icon-btn {
             border: 1px solid #cbd5e0;
@@ -388,6 +392,18 @@
             display: inline-block;
             font-weight: 600;
         }
+        .low-res-tag {
+            display: none;
+        }
+        .low-res-tag.visible {
+            display: inline-block;
+        }
+        .image-ratio-tag {
+            display: none;
+        }
+        .image-ratio-tag.visible {
+            display: inline-block;
+        }
 
         .image-details {
             display: none;
@@ -399,23 +415,60 @@
             margin-left: 4px;
         }
         .image-details > span {
-            display: block;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 8px;
         }
 
         .image-details img {
-            max-width: 220px;
-            max-height: 160px;
+            max-width: 40px;
+            max-height: 40px;
             border-radius: 6px;
             border: 1px solid #e2e8f0;
             background: #fff;
-            display: block;
-            margin-top: 6px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-top: 0;
+            cursor: zoom-in;
         }
         .image-caption {
             font-size: 0.7rem;
             color: #4a5568;
-            margin-top: 4px;
+            margin-top: 0;
+            text-align: left;
+        }
+        .image-modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.72);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .image-modal.visible {
+            display: flex;
+        }
+        .image-modal img {
+            max-width: 95vw;
+            max-height: 95vh;
+            min-width: 800px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            border-radius: 0;
+            border: none;
+            background: transparent;
+            box-shadow: none;
+            cursor: zoom-out;
+        }
+        .image-modal .modal-caption {
+            margin-top: 10px;
+            font-size: 1rem;
+            color: #e2e8f0;
             text-align: center;
+            max-width: 95vw;
         }
 
         body.dark-mode {
@@ -588,6 +641,8 @@
                 <button class="btn" id="filter-no-policy">Items with No Policy</button>
                 <button class="btn" id="filter-no-auth">Items with No Authorizations</button>
                 <button class="btn" id="filter-no-image">Items with No Image</button>
+                <button class="btn" id="filter-low-res">Items with Low Resolution Images</button>
+                <button class="btn" id="filter-no-caption">Items missing Image Caption</button>
                 <button class="btn" id="filter-no-fallback">Items with No Fallback Type</button>
                 <button class="btn" id="filter-no-related">Items with No Related Type</button>
                 <br><br>View Controls:
@@ -633,9 +688,13 @@
         let noPolicyFilterEnabled = false;
         let noAuthFilterEnabled = false;
         let noImageFilterEnabled = false;
+        let lowResFilterEnabled = false;
+        let noCaptionFilterEnabled = false;
         let noFallbackFilterEnabled = false;
         let noRelatedFilterEnabled = false;
         let searchQuery = '';
+        let totalResources = 0;
+        let currentFileName = '';
 
         function parseCSV(text) {
             const lines = text.trim().split('\n');
@@ -787,10 +846,13 @@
                     const captionValue = resource.imageCaption ? resource.imageCaption.trim().replace(/^"|"$/g, '') : '';
                     const captionMissing = !captionValue;
                     const captionText = captionMissing ? 'Placeholder Image' : captionValue;
-                    html += ' <button class="image-btn" title="Show image">Show Image</button>';
                     if (captionMissing) {
                         html += ' <span class="caption-missing-tag">Image Caption Missing</span>';
                     }
+                    html += ' <span class="caption-missing-tag low-res-tag">Low Resolution Image</span>';
+                    html += ' <span class="caption-missing-tag image-ratio-tag image-narrow-tag">Image Too Narrow</span>';
+                    html += ' <span class="caption-missing-tag image-ratio-tag image-wide-tag">Image Too Wide</span>';
+                    html += ' <button class="image-btn" title="Show image">Show Image</button>';
                     html += '<span class="image-details"><img src="' + htmlspecialchars(cleanUrl) + '" alt="Image for ' + htmlspecialchars(resource.name || resource.type || '') + '">';
                     html += '<span class="image-caption">' + htmlspecialchars(captionText) + '</span>';
                     html += '</span>';
@@ -821,6 +883,8 @@
                 const requiresAuth = !!(meta && isTruthy(meta.requiresAuthorization));
                 const hasImage = !!(meta && meta.imageUrl && meta.imageUrl.trim());
                 const noImage = !hasImage;
+                const hasCaption = !!(meta && meta.imageCaption && meta.imageCaption.trim());
+                const noCaption = hasImage && !hasCaption;
                 const hasFallback = !!(meta && meta.fallbackTypes && meta.fallbackTypes.trim() && meta.fallbackTypes.trim() !== '[]');
                 const noFallback = !hasFallback;
                 const hasRelated = !!(meta && meta.relatedTypes && meta.relatedTypes.trim() && meta.relatedTypes.trim() !== '[]');
@@ -829,7 +893,7 @@
                 const searchPolicy = meta && meta.policy ? meta.policy : '';
                 const searchAuth = meta && meta.groups ? meta.groups : '';
                 if (childKeys.length > 0) {
-                    html += '<li class="branch" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '" data-search-name="' + htmlspecialchars(searchName) + '" data-search-policy="' + htmlspecialchars(searchPolicy) + '" data-search-auth="' + htmlspecialchars(searchAuth) + '">';
+                    html += '<li class="branch" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-caption-missing="' + (noCaption ? 'true' : 'false') + '" data-low-res="' + ('false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '" data-search-name="' + htmlspecialchars(searchName) + '" data-search-policy="' + htmlspecialchars(searchPolicy) + '" data-search-auth="' + htmlspecialchars(searchAuth) + '">';
                     html += '<div class="header">';
                     html += '<span class="toggle"><span class="node-name">' + htmlspecialchars(key) + '</span></span>';
                     if (meta) {
@@ -843,7 +907,7 @@
                     html += buildTreeHTML(subtree);
                     html += '</li>';
                 } else {
-                    html += '<li class="leaf" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '" data-search-name="' + htmlspecialchars(searchName) + '" data-search-policy="' + htmlspecialchars(searchPolicy) + '" data-search-auth="' + htmlspecialchars(searchAuth) + '">';
+                    html += '<li class="leaf" data-visible="' + (isVisible ? 'true' : 'false') + '" data-policy-empty="' + (noPolicy ? 'true' : 'false') + '" data-auth-required="' + (requiresAuth ? 'true' : 'false') + '" data-image-empty="' + (noImage ? 'true' : 'false') + '" data-caption-missing="' + (noCaption ? 'true' : 'false') + '" data-low-res="' + ('false') + '" data-fallback-empty="' + (noFallback ? 'true' : 'false') + '" data-related-empty="' + (noRelated ? 'true' : 'false') + '" data-search-name="' + htmlspecialchars(searchName) + '" data-search-policy="' + htmlspecialchars(searchPolicy) + '" data-search-auth="' + htmlspecialchars(searchAuth) + '">';
                     html += '<div class="header">';
                     html += '<span class="node-name">' + htmlspecialchars(key) + '</span>';
                     if (meta) {
@@ -875,8 +939,9 @@
                     const html = buildTreeHTML(tree);
                     
                     document.getElementById('tree').innerHTML = html;
-                    document.getElementById('file-info').innerHTML = 
-                        '<strong>Loaded:</strong> ' + file.name + ' (' + resources.length + ' resources)';
+                    totalResources = resources.length;
+                    currentFileName = file.name;
+                    updateFileInfo();
                     document.getElementById('error-container').innerHTML = '';
                     
                     // Re-attach event listeners
@@ -901,6 +966,120 @@
                 '<div class="error">' + htmlspecialchars(message) + '</div>';
         }
 
+        function updateFileInfo() {
+            const shownCount = getShownResourceCount();
+            const nameText = currentFileName ? currentFileName : '';
+            const countText = '(' + totalResources + ' resources / ' + shownCount + ' shown)';
+            document.getElementById('file-info').innerHTML =
+                '<strong>Loaded:</strong> ' + nameText + ' ' + countText;
+        }
+
+        function getShownResourceCount() {
+            const tree = document.getElementById('tree');
+            if (!tree) return 0;
+            const items = tree.querySelectorAll('li');
+            let shown = 0;
+            items.forEach(li => {
+                if (li.style.display !== 'none') shown += 1;
+            });
+            return shown;
+        }
+
+        let imageModalEl = null;
+        let imageModalOpen = false;
+
+        function ensureImageModal() {
+            if (imageModalEl) return imageModalEl;
+            imageModalEl = document.createElement('div');
+            imageModalEl.className = 'image-modal';
+            imageModalEl.innerHTML = '<div class="modal-content"><img alt="Full-size image"><div class="modal-caption"></div></div>';
+            imageModalEl.addEventListener('click', () => closeImageModal());
+            imageModalEl.querySelector('img').addEventListener('click', () => closeImageModal());
+            document.body.appendChild(imageModalEl);
+            return imageModalEl;
+        }
+
+        function closeImageModal() {
+            if (!imageModalEl) return;
+            imageModalEl.classList.remove('visible');
+            imageModalOpen = false;
+        }
+
+        function openImageModal(src, altText, captionText) {
+            const modal = ensureImageModal();
+            const img = modal.querySelector('img');
+            const caption = modal.querySelector('.modal-caption');
+            img.src = src;
+            img.alt = altText || 'Full-size image';
+            if (caption) {
+                caption.textContent = captionText || '';
+            }
+            modal.classList.add('visible');
+            imageModalOpen = true;
+        }
+
+        function handleImageClick(e) {
+            const img = e.target.closest('.image-details img');
+            if (!img) return;
+            const captionEl = img.parentElement ? img.parentElement.querySelector('.image-caption') : null;
+            const captionText = captionEl ? captionEl.textContent.trim() : '';
+            e.stopPropagation();
+            openImageModal(img.src, img.alt, captionText);
+        }
+
+        function applyLowResFlag(img) {
+            const details = img.closest('.image-details');
+            if (!details) return;
+            const container = details.parentElement || details;
+            const tag = container.querySelector('.low-res-tag');
+            const narrowTag = container.querySelector('.image-narrow-tag');
+            const wideTag = container.querySelector('.image-wide-tag');
+            if (!tag) return;
+            const li = img.closest('li');
+            if (img.naturalWidth && img.naturalHeight) {
+                const isLowRes = img.naturalWidth < 400;
+                if (isLowRes) {
+                    tag.classList.add('visible');
+                } else {
+                    tag.classList.remove('visible');
+                }
+                const ratio = img.naturalWidth / img.naturalHeight;
+                const isNarrow = ratio < 0.3;
+                const isWide = ratio > 3;
+                if (narrowTag) {
+                    if (isNarrow) {
+                        narrowTag.classList.add('visible');
+                    } else {
+                        narrowTag.classList.remove('visible');
+                    }
+                }
+                if (wideTag) {
+                    if (isWide) {
+                        wideTag.classList.add('visible');
+                    } else {
+                        wideTag.classList.remove('visible');
+                    }
+                }
+                if (li) li.dataset.lowRes = (isLowRes || isNarrow || isWide) ? 'true' : 'false';
+            } else {
+                tag.classList.remove('visible');
+                if (narrowTag) narrowTag.classList.remove('visible');
+                if (wideTag) wideTag.classList.remove('visible');
+                if (li) li.dataset.lowRes = 'false';
+            }
+            if (lowResFilterEnabled) applyFilters();
+        }
+
+        function flagLowResImages() {
+            document.querySelectorAll('.image-details img').forEach(img => {
+                if (img.complete) {
+                    applyLowResFlag(img);
+                } else {
+                    img.addEventListener('load', () => applyLowResFlag(img), { once: true });
+                }
+            });
+        }
+
         function attachEventListeners() {
             // Toggle individual branch
             document.querySelectorAll('.toggle').forEach(item => {
@@ -917,6 +1096,8 @@
             const noPolicyBtn = document.getElementById('filter-no-policy');
             const noAuthBtn = document.getElementById('filter-no-auth');
             const noImageBtn = document.getElementById('filter-no-image');
+            const lowResBtn = document.getElementById('filter-low-res');
+            const noCaptionBtn = document.getElementById('filter-no-caption');
             const noFallbackBtn = document.getElementById('filter-no-fallback');
             const noRelatedBtn = document.getElementById('filter-no-related');
             const showImagesBtn = document.getElementById('show-images');
@@ -936,6 +1117,8 @@
             noPolicyBtn.removeEventListener('click', toggleNoPolicyFilter);
             noAuthBtn.removeEventListener('click', toggleNoAuthFilter);
             noImageBtn.removeEventListener('click', toggleNoImageFilter);
+            lowResBtn.removeEventListener('click', toggleLowResFilter);
+            noCaptionBtn.removeEventListener('click', toggleNoCaptionFilter);
             noFallbackBtn.removeEventListener('click', toggleNoFallbackFilter);
             noRelatedBtn.removeEventListener('click', toggleNoRelatedFilter);
             showImagesBtn.removeEventListener('click', showAllImages);
@@ -951,6 +1134,8 @@
             noPolicyBtn.addEventListener('click', toggleNoPolicyFilter);
             noAuthBtn.addEventListener('click', toggleNoAuthFilter);
             noImageBtn.addEventListener('click', toggleNoImageFilter);
+            lowResBtn.addEventListener('click', toggleLowResFilter);
+            noCaptionBtn.addEventListener('click', toggleNoCaptionFilter);
             noFallbackBtn.addEventListener('click', toggleNoFallbackFilter);
             noRelatedBtn.addEventListener('click', toggleNoRelatedFilter);
             showImagesBtn.addEventListener('click', showAllImages);
@@ -1013,7 +1198,21 @@
                     }
                 });
             });
+
+            const tree = document.getElementById('tree');
+            if (tree) {
+                tree.removeEventListener('click', handleImageClick);
+                tree.addEventListener('click', handleImageClick);
+            }
+
+            flagLowResImages();
         }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeImageModal();
+            }
+        });
 
         function togglePortalFilter() {
             portalFilterEnabled = !portalFilterEnabled;
@@ -1053,6 +1252,51 @@
             const filterBtn = document.getElementById('filter-no-image');
             if (noImageFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
+                hideAllImages();
+                if (lowResFilterEnabled) {
+                    lowResFilterEnabled = false;
+                    const lowResBtn = document.getElementById('filter-low-res');
+                    if (lowResBtn) lowResBtn.classList.remove('btn-toggle-active');
+                }
+                if (noCaptionFilterEnabled) {
+                    noCaptionFilterEnabled = false;
+                    const noCaptionBtn = document.getElementById('filter-no-caption');
+                    if (noCaptionBtn) noCaptionBtn.classList.remove('btn-toggle-active');
+                }
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleLowResFilter() {
+            lowResFilterEnabled = !lowResFilterEnabled;
+            const filterBtn = document.getElementById('filter-low-res');
+            if (lowResFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+                showAllImages();
+                expandAll();
+                if (noImageFilterEnabled) {
+                    noImageFilterEnabled = false;
+                    const noImageBtn = document.getElementById('filter-no-image');
+                    if (noImageBtn) noImageBtn.classList.remove('btn-toggle-active');
+                }
+            } else {
+                filterBtn.classList.remove('btn-toggle-active');
+            }
+            applyFilters();
+        }
+
+        function toggleNoCaptionFilter() {
+            noCaptionFilterEnabled = !noCaptionFilterEnabled;
+            const filterBtn = document.getElementById('filter-no-caption');
+            if (noCaptionFilterEnabled) {
+                filterBtn.classList.add('btn-toggle-active');
+                if (noImageFilterEnabled) {
+                    noImageFilterEnabled = false;
+                    const noImageBtn = document.getElementById('filter-no-image');
+                    if (noImageBtn) noImageBtn.classList.remove('btn-toggle-active');
+                }
             } else {
                 filterBtn.classList.remove('btn-toggle-active');
             }
@@ -1092,6 +1336,8 @@
                 const selfNoPolicy = li.dataset.policyEmpty === 'true';
                 const selfNoAuth = li.dataset.authRequired === 'false';
                 const selfNoImage = li.dataset.imageEmpty === 'true';
+                const selfNoCaption = li.dataset.captionMissing === 'true';
+                const selfLowRes = li.dataset.lowRes === 'true';
                 const selfNoFallback = li.dataset.fallbackEmpty === 'true';
                 const selfNoRelated = li.dataset.relatedEmpty === 'true';
                 const includeName = document.getElementById('search-name')?.checked;
@@ -1111,16 +1357,34 @@
                         if (walk(child)) anyChildCombined = true;
                     });
                 }
-                const selfPasses = (!portalFilterEnabled || selfVisible) && (!noPolicyFilterEnabled || selfNoPolicy) && (!noAuthFilterEnabled || selfNoAuth) && (!noImageFilterEnabled || selfNoImage) && (!noFallbackFilterEnabled || selfNoFallback) && (!noRelatedFilterEnabled || selfNoRelated);
+                const selfPasses = (!portalFilterEnabled || selfVisible) && (!noPolicyFilterEnabled || selfNoPolicy) && (!noAuthFilterEnabled || selfNoAuth) && (!noImageFilterEnabled || selfNoImage) && (!noCaptionFilterEnabled || selfNoCaption) && (!lowResFilterEnabled || selfLowRes) && (!noFallbackFilterEnabled || selfNoFallback) && (!noRelatedFilterEnabled || selfNoRelated);
                 const shouldShow = (selfPasses && selfSearchMatch) || anyChildCombined;
                 li.style.display = shouldShow ? '' : 'none';
+                li.querySelectorAll('.image-details').forEach(details => {
+                    const container = details.parentElement || details;
+                    const lowResTag = container.querySelector('.low-res-tag');
+                    const narrowTag = container.querySelector('.image-narrow-tag');
+                    const wideTag = container.querySelector('.image-wide-tag');
+                    const isLowRes = !!(
+                        (lowResTag && lowResTag.classList.contains('visible')) ||
+                        (narrowTag && narrowTag.classList.contains('visible')) ||
+                        (wideTag && wideTag.classList.contains('visible'))
+                    );
+                    if (lowResFilterEnabled) {
+                        details.style.display = isLowRes ? '' : 'none';
+                    } else {
+                        details.style.display = '';
+                    }
+                    const btn = container.querySelector('.image-btn');
+                    if (btn) btn.style.display = '';
+                });
                 if (noPolicyFilterEnabled && li.classList.contains('branch') && li.dataset.policyEmpty === 'false') {
                     li.classList.add('policy-muted');
                 } else {
                     li.classList.remove('policy-muted');
                 }
                 const selfMatchesAll = selfPasses && selfSearchMatch;
-                if (shouldShow && !selfMatchesAll && (portalFilterEnabled || noPolicyFilterEnabled || noAuthFilterEnabled || noImageFilterEnabled || noFallbackFilterEnabled || noRelatedFilterEnabled || searchQuery)) {
+                if (shouldShow && !selfMatchesAll && (portalFilterEnabled || noPolicyFilterEnabled || noAuthFilterEnabled || noImageFilterEnabled || noCaptionFilterEnabled || lowResFilterEnabled || noFallbackFilterEnabled || noRelatedFilterEnabled || searchQuery)) {
                     li.classList.add('filter-muted');
                 } else {
                     li.classList.remove('filter-muted');
@@ -1129,6 +1393,7 @@
             };
 
             Array.from(rootList.children).forEach(li => walk(li));
+            updateFileInfo();
         }
 
         function expandAll() {
