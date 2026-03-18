@@ -851,7 +851,7 @@
                     }
                     html += ' <span class="caption-missing-tag low-res-tag">Low Resolution Image</span>';
                     html += ' <span class="caption-missing-tag image-ratio-tag image-narrow-tag">Image Too Narrow</span>';
-                    html += ' <span class="caption-missing-tag image-ratio-tag image-wide-tag">Image Too Wide</span>';
+                    // removed "Image Too Wide" tag for now
                     html += ' <button class="image-btn" title="Show image">Show Image</button>';
                     html += '<span class="image-details"><img src="' + htmlspecialchars(cleanUrl) + '" alt="Image for ' + htmlspecialchars(resource.name || resource.type || '') + '">';
                     html += '<span class="image-caption">' + htmlspecialchars(captionText) + '</span>';
@@ -1230,6 +1230,7 @@
             const filterBtn = document.getElementById('filter-no-policy');
             if (noPolicyFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
+                expandAll();
             } else {
                 filterBtn.classList.remove('btn-toggle-active');
             }
@@ -1241,6 +1242,7 @@
             const filterBtn = document.getElementById('filter-no-auth');
             if (noAuthFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
+                expandAll();
             } else {
                 filterBtn.classList.remove('btn-toggle-active');
             }
@@ -1253,6 +1255,7 @@
             if (noImageFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
                 hideAllImages();
+                expandAll();
                 if (lowResFilterEnabled) {
                     lowResFilterEnabled = false;
                     const lowResBtn = document.getElementById('filter-low-res');
@@ -1292,6 +1295,7 @@
             const filterBtn = document.getElementById('filter-no-caption');
             if (noCaptionFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
+                expandAll();
                 if (noImageFilterEnabled) {
                     noImageFilterEnabled = false;
                     const noImageBtn = document.getElementById('filter-no-image');
@@ -1308,6 +1312,7 @@
             const filterBtn = document.getElementById('filter-no-fallback');
             if (noFallbackFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
+                expandAll();
             } else {
                 filterBtn.classList.remove('btn-toggle-active');
             }
@@ -1319,6 +1324,7 @@
             const filterBtn = document.getElementById('filter-no-related');
             if (noRelatedFilterEnabled) {
                 filterBtn.classList.add('btn-toggle-active');
+                expandAll();
             } else {
                 filterBtn.classList.remove('btn-toggle-active');
             }
